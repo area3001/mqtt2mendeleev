@@ -10,7 +10,7 @@
 
 #include <locale.h>
 
-#include <mendeleev.h>
+#include <mendeleev/mendeleev.h>
 #include <mosquitto.h>
 
 #define NAME "mqtt2mendeleev"
@@ -18,7 +18,7 @@
 #define VERSION "<undefined version>"
 #endif
 
-#define MAX_DATA_LENGTH 243
+#define MAX_DATA_LENGTH 240
 #define MQTT_PREFIX "mendeleev/"
 
 enum PeriodicElement {
@@ -186,7 +186,7 @@ static const char optstring[] = "Vv?h:";
 
 void mb_connect(const char *device)
 {
-    mb = mendeleev_new_rtu(device, 38400, 'O', 8, 1);
+    mb = mendeleev_new_rtu(device, 38400, 'N', 8, 1);
 
     if (mb == NULL)
     {
@@ -209,7 +209,7 @@ void mb_connect(const char *device)
 
 int mb_set_color(uint32_t color)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, (uint8_t *)(&color), sizeof(color)) == -1)
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, (uint8_t *)(&color), sizeof(color), NULL, NULL) == -1)
     {
         fprintf(stderr, "mendeleev_set_color: %s\n", mendeleev_strerror(errno));
         return -1;
@@ -219,7 +219,7 @@ int mb_set_color(uint32_t color)
 
 int mb_set_mode(uint8_t mode)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_MODE, &mode, sizeof(mode)) == -1)
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_MODE, &mode, sizeof(mode), NULL, NULL) == -1)
     {
         fprintf(stderr, "mendeleev_set_mode: %s\n", mendeleev_strerror(errno));
         return -1;
@@ -229,9 +229,19 @@ int mb_set_mode(uint8_t mode)
 
 int mb_ota(uint8_t *data, int datalength)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_OTA, data, datalength) == -1)
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_OTA, data, datalength, NULL, NULL) == -1)
     {
         fprintf(stderr, "mendeleev_ota: %s\n", mendeleev_strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+int mb_get_version(uint8_t *data, uint16_t *datalength)
+{
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_GET_VERSION, NULL, 0, data, datalength) == -1)
+    {
+        fprintf(stderr, "mendeleev_get_version: %s\n", mendeleev_strerror(errno));
         return -1;
     }
     return 0;
@@ -268,6 +278,9 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
 {
     int err = 0;
     char strid[4];
+    uint8_t data[MAX_DATA_LENGTH];
+    uint8_t response[MAX_DATA_LENGTH];
+    uint16_t response_length = 0;
     char *id_start = strchr(message->topic, '/');
     if (id_start == NULL) {
         fprintf(stderr, "Could not find /\n");
@@ -322,16 +335,23 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     else if (strcmp(id_stop+1, "ota") == 0) {
         int i = 0;
         while (i < message->payloadlen && !err) {
-            int remaining = message->payloadlen - i;
-            if (remaining < MAX_DATA_LENGTH) {
-                err = mb_ota(((uint8_t *)message->payload) + i, remaining);
+            uint16_t remaining = message->payloadlen - i;
+            data[0] = remaining >> 8;
+            data[1] = remaining & 0x00FF;
+            if (remaining < (MAX_DATA_LENGTH - sizeof(remaining))) {
+                memcpy(data + sizeof(remaining), (uint8_t *)message->payload + i, remaining);
+                err = mb_ota(data, remaining + sizeof(remaining));
                 break;
             }
             else {
-                err = mb_ota(((uint8_t *)message->payload) + i, MAX_DATA_LENGTH);
-                i += MAX_DATA_LENGTH;
+                memcpy(data + sizeof(remaining), (uint8_t *)message->payload + i, (MAX_DATA_LENGTH - sizeof(remaining)));
+                err = mb_ota(data, MAX_DATA_LENGTH);
+                i += (MAX_DATA_LENGTH - sizeof(remaining));
             }
         }
+    }
+    else if (strcmp(id_stop+1, "version") == 0) {
+        err = mb_get_version(response, &response_length);
     }
     else {
         fprintf(stderr, "Unknown command \"%s\"\n", id_stop);
@@ -339,38 +359,38 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     }
 
     if (!err) {
-        char *response = malloc(strlen(message->topic) + 4 + 1);
+        char *responsetopic = malloc(strlen(message->topic) + 4 + 1);
 
-        if (response == NULL) {
+        if (responsetopic == NULL) {
             fprintf(stderr, "malloc: Not enough memory\n");
             exit(EXIT_FAILURE);
         }
 
-        strcpy(response, message->topic);
-        strcat(response, "/nack");
+        strcpy(responsetopic, message->topic);
+        strcat(responsetopic, "/ack");
 
-        if (mosquitto_publish(mosq, NULL, response, 0, NULL, 1, false) != MOSQ_ERR_SUCCESS) {
+        if (mosquitto_publish(mosq, NULL, responsetopic, response_length, response, 1, false) != MOSQ_ERR_SUCCESS) {
             fprintf(stderr, "mosquitto_publish: Call failed\n");
         }
 
-        free(response);
+        free(responsetopic);
     }
     else {
-        char *response = malloc(strlen(message->topic) + 5 + 1);
+        char *responsetopic = malloc(strlen(message->topic) + 5 + 1);
 
-        if (response == NULL) {
+        if (responsetopic == NULL) {
             fprintf(stderr, "malloc: Not enough memory\n");
             exit(EXIT_FAILURE);
         }
 
-        strcpy(response, message->topic);
-        strcat(response, "/nack");
+        strcpy(responsetopic, message->topic);
+        strcat(responsetopic, "/nack");
 
-        if (mosquitto_publish(mosq, NULL, response, 0, NULL, 1, false) != MOSQ_ERR_SUCCESS) {
+        if (mosquitto_publish(mosq, NULL, responsetopic, response_length, response, 1, false) != MOSQ_ERR_SUCCESS) {
             fprintf(stderr, "mosquitto_publish: Call failed\n");
         }
 
-        free(response);
+        free(responsetopic);
     }
 }
 
