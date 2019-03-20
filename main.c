@@ -188,20 +188,17 @@ void mb_connect(const char *device)
 {
     mb = mendeleev_new_rtu(device, 38400, 'N', 8, 1);
 
-    if (mb == NULL)
-    {
+    if (mb == NULL) {
         fprintf(stderr, "mendeleev_new_rtu: Call failed\n");
         exit(EXIT_FAILURE);
     }
 
-    if (mendeleev_set_debug(mb, true) == -1)
-    {
+    if (mendeleev_set_debug(mb, true) == -1) {
         fprintf(stderr, "mendeleev_set_debug: %s\n", mendeleev_strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    if (mendeleev_connect(mb) == -1)
-    {
+    if (mendeleev_connect(mb) == -1) {
         fprintf(stderr, "mendeleev_connect: %s\n", mendeleev_strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -209,9 +206,17 @@ void mb_connect(const char *device)
 
 int mb_set_color(uint32_t color)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, (uint8_t *)(&color), sizeof(color), NULL, NULL) == -1)
-    {
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, (uint8_t *)(&color), sizeof(color), NULL, NULL) == -1) {
         fprintf(stderr, "mendeleev_set_color: %s\n", mendeleev_strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+int mb_set_output(uint16_t values)
+{
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_OUTPUT, (uint8_t *)(&values), sizeof(values), NULL, NULL) == -1) {
+        fprintf(stderr, "mendeleev_set_output: %s\n", mendeleev_strerror(errno));
         return -1;
     }
     return 0;
@@ -219,8 +224,7 @@ int mb_set_color(uint32_t color)
 
 int mb_set_mode(uint8_t mode)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_MODE, &mode, sizeof(mode), NULL, NULL) == -1)
-    {
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_MODE, &mode, sizeof(mode), NULL, NULL) == -1) {
         fprintf(stderr, "mendeleev_set_mode: %s\n", mendeleev_strerror(errno));
         return -1;
     }
@@ -229,8 +233,7 @@ int mb_set_mode(uint8_t mode)
 
 int mb_ota(uint8_t *data, int datalength)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_OTA, data, datalength, NULL, NULL) == -1)
-    {
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_OTA, data, datalength, NULL, NULL) == -1) {
         fprintf(stderr, "mendeleev_ota: %s\n", mendeleev_strerror(errno));
         return -1;
     }
@@ -304,8 +307,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
         return;
     }
 
-    if (mendeleev_set_slave(mb, id) == -1)
-    {
+    if (mendeleev_set_slave(mb, id) == -1) {
         fprintf(stderr, "mendeleev_set_slave with id %d: %s\n", id, mendeleev_strerror(errno));
         exit(EXIT_FAILURE);
     }
@@ -318,6 +320,17 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
         }
         else {
             fprintf(stderr, "setcolor failed: wrong payload\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    if (strcmp(id_stop+1, "setoutput") == 0) {
+        uint16_t values;
+        if (message->payloadlen == sizeof(values)) {
+            values = *((uint16_t *)(message->payload));
+            err = mb_set_output(values);
+        }
+        else {
+            fprintf(stderr, "setoutput failed: wrong payload\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -442,8 +455,7 @@ int main(int argc, char **argv)
         break;
     }
 
-    if (atexit(cleanup) != 0)
-    {
+    if (atexit(cleanup) != 0) {
         fprintf(stderr, "atexit: Call failed\n");
         exit(EXIT_FAILURE);
     }
@@ -465,8 +477,7 @@ int main(int argc, char **argv)
     mosquitto_lib_init();
     sprintf(mqtt_name, "%s-%i", NAME, getpid());
 	mosq = mosquitto_new(mqtt_name, true, NULL);
-	if (mosq == NULL)
-    {
+	if (mosq == NULL) {
         fprintf(stderr, "mosquitto_new: Call failed\n");
         exit(EXIT_FAILURE);
     }
