@@ -204,9 +204,9 @@ void mb_connect(const char *device)
     }
 }
 
-int mb_set_color(uint8_t *colors)
+int mb_set_color(uint8_t *colors, uint8_t length)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, colors, sizeof(uint8_t) * 7, NULL, NULL) == -1) {
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, colors, length, NULL, NULL) == -1) {
         fprintf(stderr, "mendeleev_set_color: %s\n", mendeleev_strerror(errno));
         return -1;
     }
@@ -314,9 +314,9 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
 
     if (strcmp(id_stop+1, "setcolor") == 0) {
         uint8_t *colors;
-        if (message->payloadlen == (sizeof(uint8_t) * 7)) {
+        if (message->payloadlen > (sizeof(uint8_t) * 2) && message->payloadlen < (sizeof(uint8_t) * 8)) {
             colors = (uint8_t *)(message->payload);
-            err = mb_set_color(colors);
+            err = mb_set_color(colors, message->payloadlen);
         }
         else {
             fprintf(stderr, "setcolor failed: wrong payload\n");
@@ -341,7 +341,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
             err = mb_set_mode(mode);
         }
         else {
-            fprintf(stderr, "setcolor failed: wrong payload\n");
+            fprintf(stderr, "setmode failed: wrong payload\n");
             exit(EXIT_FAILURE);
         }
     }
