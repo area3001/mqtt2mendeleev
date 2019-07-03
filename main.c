@@ -281,6 +281,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
 {
     int err = 0;
     char strid[4];
+    memset(strid, '\0', sizeof(strid));
     uint8_t data[MAX_DATA_LENGTH];
     uint8_t response[MAX_DATA_LENGTH];
     uint16_t response_length = 0;
