@@ -133,14 +133,26 @@ enum PeriodicElement {
     ELEMENT_Mt  = 109, // Meitnerium
     ELEMENT_Ds  = 110, // Darmstadtium
     ELEMENT_Rg  = 111, // Roentgenium
-    ELEMENT_Uub = 112, // Ununbium
-    ELEMENT_Uut = 113, // Ununtrium
-    ELEMENT_Uuq = 114, // Ununquadium
-    ELEMENT_Uup = 115, // Ununpentium
-    ELEMENT_Uuh = 116, // Ununhexium
-    ELEMENT_Uus = 117, // Ununseptium
-    ELEMENT_Uuo = 118, // Oganesson
+    ELEMENT_Cp  = 112, // Copernicium
+    ELEMENT_Nh  = 113, // Nihonium
+    ELEMENT_Fl  = 114, // Flerovium
+    ELEMENT_Mc  = 115, // Moscovium
+    ELEMENT_Lv  = 116, // Livermorium
+    ELEMENT_Ts  = 117, // Tennessine
+    ELEMENT_Og  = 118, // Oganesson
     ELEMENT_MAX = 119
+};
+
+static const int elementmap[9][18] = {
+    { ELEMENT_H ,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1, ELEMENT_He },
+    { ELEMENT_Li, ELEMENT_Be,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1, ELEMENT_B , ELEMENT_C , ELEMENT_N , ELEMENT_O , ELEMENT_F , ELEMENT_Ne },
+    { ELEMENT_Na, ELEMENT_Mg,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1,         -1, ELEMENT_Al, ELEMENT_Si, ELEMENT_P , ELEMENT_S , ELEMENT_Cl, ELEMENT_Ar },
+    { ELEMENT_K , ELEMENT_Ca, ELEMENT_Sc, ELEMENT_Ti, ELEMENT_V , ELEMENT_Cr, ELEMENT_Mn, ELEMENT_Fe, ELEMENT_Co, ELEMENT_Ni, ELEMENT_Cu, ELEMENT_Zn, ELEMENT_Ga, ELEMENT_Ge, ELEMENT_As, ELEMENT_Se, ELEMENT_Br, ELEMENT_Kr },
+    { ELEMENT_Rb, ELEMENT_Sr, ELEMENT_Y , ELEMENT_Zr, ELEMENT_Nb, ELEMENT_Mo, ELEMENT_Tc, ELEMENT_Ru, ELEMENT_Rh, ELEMENT_Pd, ELEMENT_Ag, ELEMENT_Cd, ELEMENT_In, ELEMENT_Sn, ELEMENT_Sb, ELEMENT_Te, ELEMENT_I , ELEMENT_Xe },
+    { ELEMENT_Cs, ELEMENT_Ba, ELEMENT_Lu, ELEMENT_Hf, ELEMENT_Ta, ELEMENT_W , ELEMENT_Re, ELEMENT_Os, ELEMENT_Ir, ELEMENT_Pt, ELEMENT_Au, ELEMENT_Hg, ELEMENT_Tl, ELEMENT_Pb, ELEMENT_Bi, ELEMENT_Po, ELEMENT_At, ELEMENT_Rn },
+    { ELEMENT_Fr, ELEMENT_Ra, ELEMENT_Lr, ELEMENT_Rf, ELEMENT_Db, ELEMENT_Sg, ELEMENT_Bh, ELEMENT_Hs, ELEMENT_Mt, ELEMENT_Ds, ELEMENT_Rg, ELEMENT_Cp, ELEMENT_Nh, ELEMENT_Fl, ELEMENT_Mc, ELEMENT_Lv, ELEMENT_Ts, ELEMENT_Og },
+    {         -1,         -1, ELEMENT_La, ELEMENT_Ce, ELEMENT_Pr, ELEMENT_Nd, ELEMENT_Pm, ELEMENT_Sm, ELEMENT_Eu, ELEMENT_Gd, ELEMENT_Tb, ELEMENT_Dy, ELEMENT_Ho, ELEMENT_Er, ELEMENT_Tm, ELEMENT_Yb,         -1,         -1 },
+    {         -1,         -1, ELEMENT_Ac, ELEMENT_Th, ELEMENT_Pa, ELEMENT_U , ELEMENT_Np, ELEMENT_Pu, ELEMENT_Am, ELEMENT_Cm, ELEMENT_Bk, ELEMENT_Cf, ELEMENT_Es, ELEMENT_Fm, ELEMENT_Md, ELEMENT_No,         -1,         -1 }
 };
 
 mendeleev_t *mb = NULL;
@@ -183,6 +195,16 @@ static struct option long_opts[] = {
     getopt((argc), (argv), (optstring))
 #endif
 static const char optstring[] = "Vv?h:";
+
+int get_atom_nr_for_index(int index) {
+    if (index == MENDELEEV_BROADCAST_ADDRESS) {
+        return MENDELEEV_BROADCAST_ADDRESS;
+    }
+    if (index > 0 && index <= (9*18)) {
+        return elementmap[(index-1)/18][(index-1)%18];
+    }
+    return -1;
+}
 
 void mb_connect(const char *device)
 {
@@ -302,10 +324,11 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     }
 
     strncpy(strid, id_start+1, id_stop-id_start-1);
-    uint8_t id = (uint8_t)atoi(strid);
+    int index = atoi(strid);
+    int id = get_atom_nr_for_index(index);
 
-    if (id == 0 || (id >= ELEMENT_MAX && id < MENDELEEV_BROADCAST_ADDRESS)) {
-        fprintf(stderr, "id not valid %d\n", id);
+    if (id < 1) {
+        fprintf(stderr, "index not valid %d\n", index);
         return;
     }
 
