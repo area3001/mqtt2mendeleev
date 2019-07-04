@@ -204,9 +204,9 @@ void mb_connect(const char *device)
     }
 }
 
-int mb_set_color(uint8_t *colors, uint8_t length)
+int mb_set_color(uint8_t *colors, uint16_t datalength)
 {
-    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, colors, length, NULL, NULL) == -1) {
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_SET_COLOR, colors, datalength, NULL, NULL) == -1) {
         fprintf(stderr, "mendeleev_set_color: %s\n", mendeleev_strerror(errno));
         return -1;
     }
@@ -231,7 +231,7 @@ int mb_set_mode(uint8_t mode)
     return 0;
 }
 
-int mb_ota(uint8_t *data, int datalength)
+int mb_ota(uint8_t *data, uint16_t datalength)
 {
     if (mendeleev_send_command(mb, MENDELEEV_CMD_OTA, data, datalength, NULL, NULL) == -1) {
         fprintf(stderr, "mendeleev_ota: %s\n", mendeleev_strerror(errno));
@@ -251,12 +251,13 @@ int mb_get_version(uint8_t *data, uint16_t *datalength)
 }
 
 /*
- * Subscribe to MQTT_PREFIX/+/+
+ * Subscribe to MQTT_PREFIX+/+
  */
 void mqtt_connect_callback(struct mosquitto *mosq, void *obj, int rc)
 {
     if (rc == 0) {
         char *topic = malloc(strlen(MQTT_PREFIX) + 3 + 1);
+        memset(topic, '\0', strlen(MQTT_PREFIX) + 3 + 1);
 
         if (topic == NULL) {
             fprintf(stderr, "malloc: Not enough memory\n");
@@ -287,7 +288,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     uint16_t response_length = 0;
     char *id_start = strchr(message->topic, '/');
     if (id_start == NULL) {
-        fprintf(stderr, "Could not find /\n");
+        fprintf(stderr, "Could not find first /\n");
         return;
     }
     char *id_stop = strchr(id_start+1, '/');
@@ -310,7 +311,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
 
     if (mendeleev_set_slave(mb, id) == -1) {
         fprintf(stderr, "mendeleev_set_slave with id %d: %s\n", id, mendeleev_strerror(errno));
-        exit(EXIT_FAILURE);
+        return;
     }
 
     if (strcmp(id_stop+1, "setcolor") == 0) {
@@ -321,7 +322,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
         }
         else {
             fprintf(stderr, "setcolor failed: wrong payload\n");
-            exit(EXIT_FAILURE);
+            return;
         }
     }
     else if (strcmp(id_stop+1, "setoutput") == 0) {
@@ -332,7 +333,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
         }
         else {
             fprintf(stderr, "setoutput failed: wrong payload\n");
-            exit(EXIT_FAILURE);
+            return;
         }
     }
     else if (strcmp(id_stop+1, "setmode") == 0) {
@@ -343,7 +344,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
         }
         else {
             fprintf(stderr, "setmode failed: wrong payload\n");
-            exit(EXIT_FAILURE);
+            return;
         }
     }
     else if (strcmp(id_stop+1, "ota") == 0) {
@@ -369,11 +370,12 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     }
     else {
         fprintf(stderr, "Unknown command \"%s\"\n", id_stop);
-        exit(EXIT_FAILURE);
+        return;
     }
 
     if (!err) {
         char *responsetopic = malloc(strlen(message->topic) + 4 + 1);
+        memset(responsetopic, '\0', strlen(message->topic) + 4 + 1);
 
         if (responsetopic == NULL) {
             fprintf(stderr, "malloc: Not enough memory\n");
@@ -391,6 +393,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     }
     else {
         char *responsetopic = malloc(strlen(message->topic) + 5 + 1);
+        memset(responsetopic, '\0', strlen(message->topic) + 5 + 1);
 
         if (responsetopic == NULL) {
             fprintf(stderr, "malloc: Not enough memory\n");
@@ -429,6 +432,7 @@ int main(int argc, char **argv)
     int opt;
     char *str;
     char mqtt_name[32];
+    memset(mqtt_name, '\0', sizeof(mqtt_name));
 
     setlocale(LC_ALL, "");
     /* argument parsing */
@@ -464,7 +468,7 @@ int main(int argc, char **argv)
     if (!argv[optind]) {
         fprintf(stderr, "no tty given\n");
         fputs(help_msg, stderr);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     /* prepare program */
