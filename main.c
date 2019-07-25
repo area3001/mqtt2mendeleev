@@ -371,20 +371,24 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
         }
     }
     else if (strcmp(id_stop+1, "ota") == 0) {
-        int i = 0;
-        while (i < message->payloadlen && !err) {
-            uint16_t remaining = message->payloadlen - i;
-            data[0] = remaining >> 8;
-            data[1] = remaining & 0x00FF;
-            if (remaining < (MAX_DATA_LENGTH - sizeof(remaining))) {
-                memcpy(data + sizeof(remaining), (uint8_t *)message->payload + i, remaining);
-                err = mb_ota(data, remaining + sizeof(remaining));
+        uint16_t index = 0;
+        while (index < message->payloadlen && (!err || id == MENDELEEV_BROADCAST_ADDRESS)) {
+            // TODO: add crc of frame
+            uint16_t remaining = message->payloadlen - index;
+            data[0] = index >> 8;
+            data[1] = index & 0x00FF;
+            data[2] = remaining >> 8;
+            data[3] = remaining & 0x00FF;
+            if (remaining < (MAX_DATA_LENGTH - sizeof(remaining) - sizeof(index))) {
+                memcpy(data + sizeof(remaining) + sizeof(index), (uint8_t *)message->payload + index, remaining);
+                err = mb_ota(data, remaining + sizeof(remaining) + sizeof(index));
+                /* last frame will not be acked, so error is expected */
                 break;
             }
             else {
-                memcpy(data + sizeof(remaining), (uint8_t *)message->payload + i, (MAX_DATA_LENGTH - sizeof(remaining)));
+                memcpy(data + sizeof(remaining) + sizeof(index), (uint8_t *)message->payload + index, (MAX_DATA_LENGTH - sizeof(remaining) - sizeof(index)));
                 err = mb_ota(data, MAX_DATA_LENGTH);
-                i += (MAX_DATA_LENGTH - sizeof(remaining));
+                index += (MAX_DATA_LENGTH - sizeof(remaining) - sizeof(index));
             }
         }
     }
@@ -396,41 +400,43 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
         return;
     }
 
-    if (!err) {
-        char *responsetopic = malloc(strlen(message->topic) + 4 + 1);
-        memset(responsetopic, '\0', strlen(message->topic) + 4 + 1);
+    if (id != MENDELEEV_BROADCAST_ADDRESS) {
+        if (!err) {
+            char *responsetopic = malloc(strlen(message->topic) + 4 + 1);
+            memset(responsetopic, '\0', strlen(message->topic) + 4 + 1);
 
-        if (responsetopic == NULL) {
-            fprintf(stderr, "malloc: Not enough memory\n");
-            exit(EXIT_FAILURE);
+            if (responsetopic == NULL) {
+                fprintf(stderr, "malloc: Not enough memory\n");
+                exit(EXIT_FAILURE);
+            }
+
+            strcpy(responsetopic, message->topic);
+            strcat(responsetopic, "/ack");
+
+            if (mosquitto_publish(mosq, NULL, responsetopic, response_length, response, 1, false) != MOSQ_ERR_SUCCESS) {
+                fprintf(stderr, "mosquitto_publish: Call failed\n");
+            }
+
+            free(responsetopic);
         }
+        else {
+            char *responsetopic = malloc(strlen(message->topic) + 5 + 1);
+            memset(responsetopic, '\0', strlen(message->topic) + 5 + 1);
 
-        strcpy(responsetopic, message->topic);
-        strcat(responsetopic, "/ack");
+            if (responsetopic == NULL) {
+                fprintf(stderr, "malloc: Not enough memory\n");
+                exit(EXIT_FAILURE);
+            }
 
-        if (mosquitto_publish(mosq, NULL, responsetopic, response_length, response, 1, false) != MOSQ_ERR_SUCCESS) {
-            fprintf(stderr, "mosquitto_publish: Call failed\n");
+            strcpy(responsetopic, message->topic);
+            strcat(responsetopic, "/nack");
+
+            if (mosquitto_publish(mosq, NULL, responsetopic, response_length, response, 1, false) != MOSQ_ERR_SUCCESS) {
+                fprintf(stderr, "mosquitto_publish: Call failed\n");
+            }
+
+            free(responsetopic);
         }
-
-        free(responsetopic);
-    }
-    else {
-        char *responsetopic = malloc(strlen(message->topic) + 5 + 1);
-        memset(responsetopic, '\0', strlen(message->topic) + 5 + 1);
-
-        if (responsetopic == NULL) {
-            fprintf(stderr, "malloc: Not enough memory\n");
-            exit(EXIT_FAILURE);
-        }
-
-        strcpy(responsetopic, message->topic);
-        strcat(responsetopic, "/nack");
-
-        if (mosquitto_publish(mosq, NULL, responsetopic, response_length, response, 1, false) != MOSQ_ERR_SUCCESS) {
-            fprintf(stderr, "mosquitto_publish: Call failed\n");
-        }
-
-        free(responsetopic);
     }
 }
 
