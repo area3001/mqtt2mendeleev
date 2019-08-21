@@ -309,6 +309,8 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     uint8_t response[MAX_DATA_LENGTH];
     uint16_t response_length = 0;
     char *id_start = strchr(message->topic, '/');
+    uint32_t timeout_useconds = 500000;
+
     if (id_start == NULL) {
         fprintf(stderr, "Could not find first /\n");
         return;
@@ -334,6 +336,19 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
 
     if (mendeleev_set_slave(mb, id) == -1) {
         fprintf(stderr, "mendeleev_set_slave with id %d: %s\n", id, mendeleev_strerror(errno));
+        return;
+    }
+
+    if (id == MENDELEEV_BROADCAST_ADDRESS) {
+        /*
+          lower the response timeout because we
+          do not expect a response when broadcasting
+        */
+        timeout_useconds = 100000;
+    }
+
+    if (mendeleev_set_response_timeout(mb, 0, timeout_useconds) == -1) {
+        fprintf(stderr, "mendeleev_set_response_timeout to %d microseconds: %s\n", timeout_useconds, mendeleev_strerror(errno));
         return;
     }
 
@@ -373,7 +388,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     else if (strcmp(id_stop+1, "ota") == 0) {
         uint16_t index = 0;
         while (index < message->payloadlen && (!err || id == MENDELEEV_BROADCAST_ADDRESS)) {
-            // TODO: add crc of frame
+            // TODO: add crc of frame?
             uint16_t remaining = message->payloadlen - index;
             data[0] = index >> 8;
             data[1] = index & 0x00FF;
@@ -382,7 +397,6 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
             if (remaining < (MAX_DATA_LENGTH - sizeof(remaining) - sizeof(index))) {
                 memcpy(data + sizeof(remaining) + sizeof(index), (uint8_t *)message->payload + index, remaining);
                 err = mb_ota(data, remaining + sizeof(remaining) + sizeof(index));
-                /* last frame will not be acked, so error is expected */
                 break;
             }
             else {
@@ -390,6 +404,9 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
                 err = mb_ota(data, MAX_DATA_LENGTH);
                 index += (MAX_DATA_LENGTH - sizeof(remaining) - sizeof(index));
             }
+        }
+        if (err && id != MENDELEEV_BROADCAST_ADDRESS) {
+            fprintf(stderr, "OTA Failed for id %d\n", id);
         }
     }
     else if (strcmp(id_stop+1, "version") == 0) {
