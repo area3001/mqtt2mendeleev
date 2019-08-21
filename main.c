@@ -272,6 +272,16 @@ int mb_get_version(uint8_t *data, uint16_t *datalength)
     return 0;
 }
 
+int mb_reboot()
+{
+    if (mendeleev_send_command(mb, MENDELEEV_CMD_REBOOT, NULL, 0, NULL, 0) == -1)
+    {
+        fprintf(stderr, "mendeleev_reboot: %s\n", mendeleev_strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 /*
  * Subscribe to MQTT_PREFIX+/+
  */
@@ -412,8 +422,11 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     else if (strcmp(id_stop+1, "version") == 0) {
         err = mb_get_version(response, &response_length);
     }
+    else if (strcmp(id_stop+1, "reboot") == 0) {
+        err = mb_reboot();
+    }
     else {
-        fprintf(stderr, "Unknown command \"%s\"\n", id_stop);
+        fprintf(stderr, "Unknown command \"%s\"\n", id_stop+1);
         return;
     }
 
