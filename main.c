@@ -336,8 +336,8 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     }
 
     strncpy(strid, id_start+1, id_stop-id_start-1);
-    int index = atoi(strid);
-    int id = get_atom_nr_for_index(index);
+    int tableindex = atoi(strid);
+    int id = get_atom_nr_for_index(tableindex);
 
     if (id < 1) {
         fprintf(stderr, "index not valid %d\n", index);
