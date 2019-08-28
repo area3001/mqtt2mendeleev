@@ -340,7 +340,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     int id = get_atom_nr_for_index(tableindex);
 
     if (id < 1) {
-        fprintf(stderr, "index not valid %d\n", index);
+        fprintf(stderr, "index not valid %d\n", tableindex);
         return;
     }
 
@@ -354,7 +354,7 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
           lower the response timeout because we
           do not expect a response when broadcasting
         */
-        timeout_useconds = 100000;
+        timeout_useconds = 500000;
     }
 
     if (mendeleev_set_response_timeout(mb, 0, timeout_useconds) == -1) {
