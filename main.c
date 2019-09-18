@@ -319,7 +319,6 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
     uint8_t response[MAX_DATA_LENGTH];
     uint16_t response_length = 0;
     char *id_start = strchr(message->topic, '/');
-    uint32_t timeout_useconds = 500000;
 
     if (id_start == NULL) {
         fprintf(stderr, "Could not find first /\n");
@@ -346,19 +345,6 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
 
     if (mendeleev_set_slave(mb, id) == -1) {
         fprintf(stderr, "mendeleev_set_slave with id %d: %s\n", id, mendeleev_strerror(errno));
-        return;
-    }
-
-    if (id == MENDELEEV_BROADCAST_ADDRESS) {
-        /*
-          lower the response timeout because we
-          do not expect a response when broadcasting
-        */
-        timeout_useconds = 500000;
-    }
-
-    if (mendeleev_set_response_timeout(mb, 0, timeout_useconds) == -1) {
-        fprintf(stderr, "mendeleev_set_response_timeout to %d microseconds: %s\n", timeout_useconds, mendeleev_strerror(errno));
         return;
     }
 
@@ -412,6 +398,9 @@ void mqtt_message_callback(struct mosquitto *mosq, void *obj, const struct mosqu
             else {
                 memcpy(data + sizeof(remaining) + sizeof(index), (uint8_t *)message->payload + index, (MAX_DATA_LENGTH - sizeof(remaining) - sizeof(index)));
                 err = mb_ota(data, MAX_DATA_LENGTH);
+                if (index == 0) {
+                    sleep(1);
+                }
                 index += (MAX_DATA_LENGTH - sizeof(remaining) - sizeof(index));
             }
         }
